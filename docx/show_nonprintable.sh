@@ -27,6 +27,14 @@ fi
 
 DOCX_FILE="$1"
 TMP_DIR=$(mktemp -d)
+TEXT_FILE="$TMP_DIR/text.txt"
+PYTHON_SCRIPT="$(dirname "$0")/process_text.py"
+
+# Проверка наличия Python скрипта
+if [ ! -f "$PYTHON_SCRIPT" ]; then
+  echo "Error: Python script not found at $PYTHON_SCRIPT"
+  exit 1
+fi
 
 # Распаковываем .docx
 unzip -qq "$DOCX_FILE" -d "$TMP_DIR"
@@ -38,37 +46,11 @@ if [ ! -f "$XML" ]; then
   exit 1
 fi
 
-# Извлекаем текст без XML-тегов
-TEXT=$(sed 's/<[^>]*>//g' "$XML")
+# Извлекаем текст без XML-тегов и сохраняем в файл
+sed 's/<[^>]*>//g' "$XML" > "$TEXT_FILE"
 
-# Передаём в Python через stdin
-echo "$TEXT" | python3 -c '
-import sys
-import unicodedata
-
-# Символы, которые считаем подозрительными/невидимыми
-bad_chars = {
-    0x00A0,  # NO-BREAK SPACE
-    0x200B,  # ZERO WIDTH SPACE
-    0x200C,  # ZERO WIDTH NON-JOINER
-    0x200D,  # ZERO WIDTH JOINER
-    0x202C,  # POP DIRECTIONAL FORMATTING
-    0x202E,  # RIGHT-TO-LEFT OVERRIDE
-    0x202F,  # NARROW NO-BREAK SPACE
-    0x2060,  # WORD JOINER
-    0xFEFF   # BOM
-}
-
-text = sys.stdin.read()
-for i, ch in enumerate(text, 1):
-    code = ord(ch)
-    if code in bad_chars:
-        try:
-            name = unicodedata.name(ch)
-        except ValueError:
-            name = "UNKNOWN"
-        print(f"Position: {i}, Char: U+{code:04X}, Name: {name}")
-'
+# Запуск Python скрипта
+python3 "$PYTHON_SCRIPT" "$TEXT_FILE"
 
 # Очистка
 rm -rf "$TMP_DIR"
